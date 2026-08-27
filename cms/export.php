@@ -163,7 +163,8 @@ function export_basic_auth($dir, $user, $pass) {
     if (!file_exists($dir.'/.htaccess')) {
         $abs = realpath($dir.'/.htpasswd'); if ($abs === false) $abs = $dir.'/.htpasswd';
         @file_put_contents($dir.'/.htaccess',
-            "AuthType Basic\nAuthName \"Restricted\"\nAuthUserFile ".$abs."\nRequire valid-user\n");
+            "AuthType Basic\nAuthName \"Restricted\"\nAuthUserFile ".$abs."\nRequire valid-user\n".
+            "ErrorDocument 401 default\n");   // clean 401 instead of the host's broken custom error doc
     }
 }
 

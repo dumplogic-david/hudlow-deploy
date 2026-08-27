@@ -2,18 +2,21 @@
 # ============================================================================
 #  hudlow deploy — interactive bootstrap
 # ============================================================================
-#  RUN IT INSIDE THE HOSTED CONTENT DIRECTORY (not your home folder):
+#  RUN IT INSIDE THE HOSTED CONTENT DIRECTORY (not your home folder).
+#  Download-then-run is the most reliable form for the interactive wizard:
 #
-#    # publish target — cd into the live site dir first:
-#    cd ~/public_html/dhudlow
-#    curl -fsSL https://raw.githubusercontent.com/dumplogic-david/hudlow-deploy/main/install.sh | bash -s -- publish
+#    # publish target — the live site dir:
+#    cd ~/public_html/<published-site>
+#    curl -fsSL https://raw.githubusercontent.com/dumplogic-david/hudlow-deploy/main/install.sh -o /tmp/hlw.sh
+#    bash /tmp/hlw.sh publish
 #
-#    # CMS box — cd into the dir that holds config.php:
-#    cd ~/public_html/cms
-#    curl -fsSL https://raw.githubusercontent.com/dumplogic-david/hudlow-deploy/main/install.sh | bash -s -- cms
+#    # CMS box — the "obvious" dir that holds config.php + export.php:
+#    cd ~/public_html/<cms-site>/obvious
+#    curl -fsSL https://raw.githubusercontent.com/dumplogic-david/hudlow-deploy/main/install.sh -o /tmp/hlw.sh
+#    bash /tmp/hlw.sh cms
 #
-#  It asks a few questions (reading your terminal via /dev/tty even under
-#  curl|bash) and writes the config for you — no file editing.
+#  It asks a few questions (reading your terminal via /dev/tty) and writes the
+#  config for you — no file editing. Piping straight into bash also works.
 # ============================================================================
 set -eu
 
@@ -127,7 +130,7 @@ publish_done() { # <dest> <mdir> <live> <siteurl>
 
 # --------------------------------------------------------------------------
 cms_side() {
-  local DEST KEY APASS BUILDS BACKUPS root TARGETS
+  local DEST KEY APASS root TARGETS
   DEST="$PWD"
   [ -f "$DEST/config.php" ] || say "!! No config.php in $DEST — are you in the CMS admin dir? Continuing anyway."
   if [ -f "$DEST/export.php" ]; then
@@ -150,8 +153,6 @@ cms_side() {
   rule; say "CMS setup — a few questions"; rule
   KEY="$(ask_secret 'Trigger key (identical on every publish target)')"
   APASS="$(ask_secret 'Archive download password (identical on every target)')"
-  BUILDS="$(ask 'Builds dir — web-served, UNDER public_html' '../builds/')"
-  BACKUPS="$(ask 'Backups dir — private, OUTSIDE public_html' '../../backups/')"
   say "" >"$TTY" || true
   say "For each site you publish to, enter its ROOT URL (e.g. https://dhudlow.com)." >"$TTY" || true
   say "The /deploy/update.php path is appended automatically. Blank line to finish." >"$TTY" || true
@@ -165,11 +166,13 @@ cms_side() {
   done
   {
     echo "<?php"
-    echo "/* Deploy settings written by the installer wizard; included by export.php after config.php. */"
-    echo "\$config['remote_key']  = '$(php_quote "$KEY")';"
+    echo "/* Deploy settings written by the installer wizard; included by export.php after config.php."
+    echo "   builds_dir/backups_dir are intentionally omitted — export.php resolves them from its"
+    echo "   own location so they can't depend on the working directory. */"
+    echo "\$config['remote_key']   = '$(php_quote "$KEY")';"
+    echo "\$config['archive_user'] = 'deploy';"
     echo "\$config['archive_pass'] = '$(php_quote "$APASS")';"
-    echo "\$config['builds_dir']  = '$(php_quote "$BUILDS")';"
-    echo "\$config['backups_dir'] = '$(php_quote "$BACKUPS")';"
+    echo "\$config['keep_builds']  = 20;"
     echo "\$config['publish_targets'] = array("
     printf '%s' "$TARGETS"
     echo ");"

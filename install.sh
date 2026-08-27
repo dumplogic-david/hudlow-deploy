@@ -54,7 +54,7 @@ fetch() { # fetch <url> <dest>
 
 # --------------------------------------------------------------------------
 publish_side() {
-  local DEST MDIR KEY AURL AUSER APASS LIVE SENT
+  local DEST MDIR KEY APASS CMSURL SITEURL AURL LIVE
   DEST="$PWD"
   MDIR="$DEST/deploy"
   mkdir -p "$MDIR/staging"
@@ -88,33 +88,37 @@ HT
   fi
 
   rule; say "PUBLISH setup — a few questions"; rule
-  KEY="$(ask_secret 'Trigger key (identical on CMS + every target)')"
-  AURL="$(ask 'Archive URL (the CMS builds/latest.tar.gz)' 'https://YOUR-CMS-HOST/builds/latest.tar.gz')"
-  AUSER="$(ask 'Archive Basic-Auth user' 'deploy')"
-  APASS="$(ask_secret 'Archive Basic-Auth password')"
-  LIVE="$(ask 'Live site directory (what gets deployed)' "$DEST")"
-  SENT="$(ask 'Sentinel file that must exist in a valid build' 'index.php')"
+  KEY="$(ask_secret 'Trigger key (identical on the CMS + every target)')"
+  APASS="$(ask_secret 'Archive download password (same as on the CMS)')"
+  say "" >"$TTY" || true
+  say "The CMS base URL is where the built site is downloaded from." >"$TTY" || true
+  CMSURL="$(ask 'CMS base URL (e.g. https://cms.dhudlow.com)' 'https://cms.dhudlow.com')"
+  say "" >"$TTY" || true
+  say "This sites root URL is the web address that serves THIS folder." >"$TTY" || true
+  SITEURL="$(ask 'This sites root URL (e.g. https://dhudlow.com)' '')"
+  LIVE="$(ask 'Directory to deploy into (usually this one)' "$DEST")"
+  CMSURL="${CMSURL%/}"; SITEURL="${SITEURL%/}"
+  AURL="$CMSURL/builds/latest.tar.gz"
   {
     echo "<?php"
     echo "\$KEY          = '$(php_quote "$KEY")';"
     echo "\$ARCHIVE_URL  = '$(php_quote "$AURL")';"
-    echo "\$ARCHIVE_USER = '$(php_quote "$AUSER")';"
+    echo "\$ARCHIVE_USER = 'deploy';"
     echo "\$ARCHIVE_PASS = '$(php_quote "$APASS")';"
     echo "\$LIVE_DIR     = '$(php_quote "$LIVE")';"
-    echo "\$SENTINEL     = '$(php_quote "$SENT")';"
-    echo "\$EXCLUDES     = array();"
   } > "$MDIR/remote_config.php"
   chmod 600 "$MDIR/remote_config.php" 2>/dev/null || true
-  publish_done "$DEST" "$MDIR" "$LIVE"
+  publish_done "$DEST" "$MDIR" "$LIVE" "$SITEURL"
 }
 
-publish_done() { # <dest> <mdir> <live>
-  local DEST="$1" MDIR="$2" LIVE="${3:-$PWD}"
+publish_done() { # <dest> <mdir> <live> <siteurl>
+  local DEST="$1" MDIR="$2" LIVE="${3:-$PWD}" SITEURL="${4:-}" EP
+  if [ -n "$SITEURL" ]; then EP="$SITEURL/deploy/update.php"; else EP="https://<this sites root URL>/deploy/update.php"; fi
   rule
   say "PUBLISH installed:  $MDIR/update.php"
   say "Deploys into:       $LIVE"
-  say "Endpoint URL:       https://<public url of $DEST>/deploy/update.php"
-  say "  → add that URL to publish_targets on the CMS."
+  say "Endpoint URL:       $EP"
+  say "  → add THIS url to the publish list on the CMS."
   rule
   say "Dry-run test (safe — a bad build aborts without touching the site):"
   say "  php \"$MDIR/update.php\" \"\$(php -r 'echo md5(round(time()/1000).\"YOURKEY\");')\""
@@ -123,7 +127,7 @@ publish_done() { # <dest> <mdir> <live>
 
 # --------------------------------------------------------------------------
 cms_side() {
-  local DEST KEY AUSER APASS BUILDS BACKUPS KEEP t TARGETS
+  local DEST KEY APASS BUILDS BACKUPS root TARGETS
   DEST="$PWD"
   [ -f "$DEST/config.php" ] || say "!! No config.php in $DEST — are you in the CMS admin dir? Continuing anyway."
   if [ -f "$DEST/export.php" ]; then
@@ -144,29 +148,28 @@ cms_side() {
   fi
 
   rule; say "CMS setup — a few questions"; rule
-  KEY="$(ask_secret 'Trigger key (identical on every target)')"
-  AUSER="$(ask 'Archive Basic-Auth user' 'deploy')"
-  APASS="$(ask_secret 'Archive Basic-Auth password')"
-  BUILDS="$(ask 'Builds dir (UNDER public_html)' '../builds/')"
-  BACKUPS="$(ask 'Backups dir (OUTSIDE public_html)' '../../backups/')"
-  KEEP="$(ask 'How many builds/backups to keep' '20')"
-  printf 'Publish target URLs — one per line, blank to finish:\n' >"$TTY" || true
+  KEY="$(ask_secret 'Trigger key (identical on every publish target)')"
+  APASS="$(ask_secret 'Archive download password (identical on every target)')"
+  BUILDS="$(ask 'Builds dir — web-served, UNDER public_html' '../builds/')"
+  BACKUPS="$(ask 'Backups dir — private, OUTSIDE public_html' '../../backups/')"
+  say "" >"$TTY" || true
+  say "For each site you publish to, enter its ROOT URL (e.g. https://dhudlow.com)." >"$TTY" || true
+  say "The /deploy/update.php path is appended automatically. Blank line to finish." >"$TTY" || true
   TARGETS=""
   while : ; do
-    t="$(ask '  target URL' '')"
-    [ -z "$t" ] && break
-    TARGETS="${TARGETS}    '$(php_quote "$t")',
+    root="$(ask '  site root URL' '')"
+    [ -z "$root" ] && break
+    root="${root%/}"
+    TARGETS="${TARGETS}    '$(php_quote "$root/deploy/update.php")',
 "
   done
   {
     echo "<?php"
     echo "/* Deploy settings written by the installer wizard; included by export.php after config.php. */"
-    echo "\$config['remote_key']   = '$(php_quote "$KEY")';"
-    echo "\$config['archive_user'] = '$(php_quote "$AUSER")';"
+    echo "\$config['remote_key']  = '$(php_quote "$KEY")';"
     echo "\$config['archive_pass'] = '$(php_quote "$APASS")';"
-    echo "\$config['builds_dir']   = '$(php_quote "$BUILDS")';"
-    echo "\$config['backups_dir']  = '$(php_quote "$BACKUPS")';"
-    echo "\$config['keep_builds']  = $(printf '%d' "${KEEP:-20}" 2>/dev/null || echo 20);"
+    echo "\$config['builds_dir']  = '$(php_quote "$BUILDS")';"
+    echo "\$config['backups_dir'] = '$(php_quote "$BACKUPS")';"
     echo "\$config['publish_targets'] = array("
     printf '%s' "$TARGETS"
     echo ");"

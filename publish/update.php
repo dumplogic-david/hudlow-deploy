@@ -84,7 +84,9 @@ if ($count < 1 || !$sentinel_ok) {
 
 /* ---- 4. mirror staging -> live, protecting the deploy machinery ---- */
 $protect = array_merge(
-    array('deploy', 'staging', '.htaccess', '.htpasswd', '.well-known', 'cgi-bin'),
+    // never delete our own machinery — safe whether it sits in ./deploy/ or directly in LIVE_DIR
+    array('deploy', 'staging', 'update.php', 'remote_config.php', 'update.log', 'build.tar.gz',
+          '.htaccess', '.htpasswd', '.well-known', 'cgi-bin'),
     $EXCLUDES
 );
 mirror($STAGING, $LIVE_DIR, $protect);

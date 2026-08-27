@@ -29,6 +29,7 @@
 
 @set_time_limit(0);
 include_once("config.php");
+@include(dirname(__FILE__) . '/deploy.conf.php');   // deploy settings written by the installer wizard
 
 /* Auth for web use; allow CLI runs for testing/cron. */
 if (php_sapi_name() !== 'cli') {

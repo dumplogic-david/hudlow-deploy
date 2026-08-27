@@ -120,8 +120,7 @@ if (!isset($_SERVER["HTTP_REFERER"]) || !$_SERVER["HTTP_REFERER"])
 header($_SERVER["HTTP_REFERER"]);
 
 
-/* ============================ helpers (defined once) ============================ */
-if (!function_exists('export_targz')) {
+/* ============================ helpers (top-level so they hoist) ============================ */
 
 function export_targz($srcDir, $destTarGz) {
     $srcDir = rtrim($srcDir, '/');
@@ -195,6 +194,4 @@ function export_http_get($url, $user = '', $pass = '') {
     }
     $auth = $user !== '' ? ' -u '.escapeshellarg($user.':'.$pass) : '';
     return @shell_exec('curl -fsSL'.$auth.' '.escapeshellarg($url).' 2>/dev/null');
-}
-
 }
